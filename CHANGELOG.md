@@ -84,3 +84,9 @@ Full details now use the native backdrop as an edge-to-edge cinema screen with l
 ## 1.2.2 — Continuous cinema backdrop
 
 The static vignette now follows the full native backdrop instead of ending at the shorter detail panel, removing the horizontal seam below the actions. No layout measuring, extra network calls or animated masks were introduced.
+
+## 1.2.3 — Cinematic home and compact navigation
+
+Recomposed the home screen around a larger, bottom-aligned cinematic hero and a compact poster rail. Reduced the native header, icons and title so navigation occupies less of the television. Kept the native posters, controllers and detail actions.
+
+Added direct native/jQuery/`$` focus compatibility and a coalesced, one-shot DPAD fallback for custom controllers. A recreated hero always repopulates its text. All owned card handlers are released when leaving the home screen or destroying the plugin; no polling or catalogue-wide class observer was added.

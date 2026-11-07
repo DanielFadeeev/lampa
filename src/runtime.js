@@ -1,5 +1,5 @@
 /*
- * Apple TV+ presentation for Lampa 1.2.2 — Android TV / low-paint edition.
+ * Apple TV+ presentation for Lampa 1.2.3 — Android TV / low-paint edition.
  * Local presentation only: no Storage writes, accounts, API overrides, telemetry,
  * controller replacement, fabricated media capabilities or external dependencies.
  * DOM references: yumata/lampa-source components/full/start.js,
@@ -9,7 +9,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '1.2.2';
+    var VERSION = '1.2.3';
     var STYLE_ID = 'apple-tv-plus-ui-style';
     var previous = window.__apple_tv_plus_ui;
     if (previous && !previous.destroyed) {
@@ -29,11 +29,11 @@
         currentCard: null, pendingCard: null, observedCard: null, heroSignature: '',
         imageURL: '', loadedImageURL: '', imageSlot: 0, requestedImage: null,
         imageRequestID: 0, failedImageURL: '', imageRetryAfter: 0,
-        refreshTimer: 0, focusTimer: 0, imageTimer: 0, bootstrapTimer: 0,
+        refreshTimer: 0, focusTimer: 0, imageTimer: 0, bootstrapTimer: 0, keyTimer: 0,
         frame: 0, bootstrapAttempts: 0, mount: null,
         mountObserver: null, activityObserver: null, homeObserver: null, cardObserver: null,
         homeObserverRoot: null, homeObserverMode: '',
-        homeBootstrapTimer: 0, jqueryBound: false,
+        homeBootstrapTimer: 0, jqueryBound: false, jquery: null, boundCards: [], boundCardSet: new WeakSet(),
         stats: { refreshes: 0, heroUpdates: 0, imageRequests: 0 }
     };
     window.__apple_tv_plus_ui = state;
@@ -53,6 +53,10 @@
         return node;
     }
     function setText(node, text) { if (node.textContent !== text) node.textContent = text; }
+    function jquery() {
+        var jq = window.jQuery || window.$;
+        return typeof jq === 'function' && jq.fn && jq.fn.on ? jq : null;
+    }
     function activeActivity() {
         try {
             var active = window.Lampa && Lampa.Activity && Lampa.Activity.active();
@@ -64,6 +68,28 @@
         window.clearTimeout(state.imageTimer);
         state.focusTimer = state.imageTimer = 0;
         state.pendingCard = null;
+    }
+    function clearCardEvents() {
+        state.boundCards.forEach(function (entry) {
+            entry.card.removeEventListener('hover:focus', focusEvent);
+            entry.card.removeEventListener('hover:hover', focusEvent);
+            if (entry.jquery) entry.jquery(entry.card).off('.atvp-card');
+        });
+        state.boundCards = [];
+        state.boundCardSet = new WeakSet();
+        window.clearTimeout(state.keyTimer);
+        state.keyTimer = 0;
+    }
+    function bindCardEvents(card) {
+        if (!card || state.boundCardSet.has(card)) return;
+        var jq = jquery();
+        card.addEventListener('hover:focus', focusEvent);
+        card.addEventListener('hover:hover', focusEvent);
+        // Some APKs/plugins dispatch jQuery-only, non-bubbling hover events.
+        // Bind to each real card; document delegation cannot receive those.
+        if (jq) jq(card).on('hover:focus.atvp-card hover:hover.atvp-card', focusEvent);
+        state.boundCards.push({ card: card, jquery: jq });
+        state.boundCardSet.add(card);
     }
     function cancelRefresh() {
         window.clearTimeout(state.refreshTimer);
@@ -103,6 +129,7 @@
     }
     function detachHome() {
         clearFocus();
+        clearCardEvents();
         cancelImage();
         disconnectCard();
         window.clearTimeout(state.homeBootstrapTimer);
@@ -146,11 +173,15 @@
         state.scroll = scroll;
         state.hero = hero;
         state.refs = { images: images, title: title, meta: meta, overview: overview };
+        // A new DOM must be populated even when the previously selected title
+        // has the same metadata signature after returning from a detail page.
+        state.heroSignature = '';
         state.imageSlot = 0;
     }
     function cardData(card) {
         if (card.card_data) return card.card_data;
-        return window.jQuery ? window.jQuery(card).data('card') || {} : {};
+        var jq = jquery();
+        return jq ? jq(card).data('card') || {} : {};
     }
     function artwork(data, card) {
         var url = '';
@@ -257,6 +288,19 @@
         state.focusTimer = window.setTimeout(function () { updateHero(card); }, 65);
     }
     function focusEvent(event) { queueFocus(closest(event.target, '.card')); }
+    function remoteKey(event) {
+        var code = event.keyCode || event.which;
+        if (!state.root || !state.hero || document.hidden || state.keyTimer ||
+            !((code >= 19 && code <= 22) || (code >= 37 && code <= 40) || /^Arrow(?:Left|Right|Up|Down)$/.test(event.key || ''))) return;
+        // Compatibility fallback for custom controllers that only toggle the
+        // focus class. One post-navigation read per key burst, never polling.
+        state.keyTimer = window.setTimeout(function () {
+            state.keyTimer = 0;
+            if (state.destroyed || document.hidden || !state.root) return;
+            var card = state.root.querySelector('.card.focus');
+            if (card) { bindCardEvents(card); queueFocus(card); }
+        }, 65);
+    }
     function meaningfulInsert(node) {
         if (!node || node.nodeType !== 1 || node.hasAttribute('data-atvp-hero')) return false;
         return (node.matches && node.matches('.card,.scroll,.activity__body,.items-line')) || !!node.querySelector('.card,.scroll');
@@ -319,9 +363,11 @@
         for (var i = 0; i < activities.length; i++) state.activityObserver.observe(activities[i], { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
     }
     function hookLampa() {
-        if (window.jQuery && !state.jqueryBound) {
-            window.jQuery(document).on('hover:focus.atvp', '.card', focusEvent);
+        var jq = jquery();
+        if (jq && !state.jqueryBound) {
+            jq(document).on('hover:focus.atvp hover:hover.atvp', '.card', focusEvent);
             state.jqueryBound = true;
+            state.jquery = jq;
         }
         if (!window.Lampa || !Lampa.Listener || !Lampa.Listener.follow) return;
         // Lampa versions differ in unsubscribe support. Register one dispatcher
@@ -375,6 +421,7 @@
             state.root = root;
         }
         if (!state.hero) createHero(root, scroll);
+        Array.prototype.forEach.call(root.querySelectorAll('.card'), bindCardEvents);
         observeHome(root, false);
         queueFocus(root.querySelector('.card.focus') || firstCard, true);
     }
@@ -390,6 +437,8 @@
     function visibilityChange() {
         if (document.hidden) {
             clearFocus();
+            window.clearTimeout(state.keyTimer);
+            state.keyTimer = 0;
             cancelRefresh();
             cancelImage();
             disconnectCard();
@@ -413,11 +462,14 @@
         if (state.fullRoot) state.fullRoot.classList.remove('atvp-full');
         state.fullRoot = state.mount = null;
         document.removeEventListener('hover:focus', focusEvent, true);
+        document.removeEventListener('hover:hover', focusEvent, true);
         document.removeEventListener('focusin', focusEvent, true);
+        document.removeEventListener('keydown', remoteKey, true);
         document.removeEventListener('visibilitychange', visibilityChange);
         document.removeEventListener('DOMContentLoaded', start);
-        if (window.jQuery && state.jqueryBound) window.jQuery(document).off('hover:focus.atvp', '.card', focusEvent);
+        if (state.jquery && state.jqueryBound) state.jquery(document).off('hover:focus.atvp hover:hover.atvp', '.card', focusEvent);
         state.jqueryBound = false;
+        state.jquery = null;
         var bridge = window.__apple_tv_plus_activity_bridge;
         if (bridge && bridge.callback === scheduleRefresh) bridge.callback = null;
         var style = document.getElementById(STYLE_ID);
@@ -436,7 +488,9 @@
         (document.head || document.documentElement).appendChild(style);
         document.body.classList.add('atvp-ui');
         document.addEventListener('hover:focus', focusEvent, true);
+        document.addEventListener('hover:hover', focusEvent, true);
         document.addEventListener('focusin', focusEvent, true);
+        document.addEventListener('keydown', remoteKey, true);
         document.addEventListener('visibilitychange', visibilityChange);
         scheduleRefresh();
         console.info('AppleTVPlusUI ready', VERSION);
