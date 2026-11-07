@@ -6,6 +6,7 @@ const runtime = fs.readFileSync(path.join(root, 'src/runtime.js'), 'utf8').repla
 const css = fs.readFileSync(path.join(root, 'src/theme.css'), 'utf8').replace(/\r\n/g, '\n').trim();
 const marker = 'var css = /* ATVP_THEME_CSS */ "";';
 if (runtime.split(marker).length !== 2) throw new Error('Expected exactly one theme marker');
-const output = runtime.replace(marker, 'var css = ' + JSON.stringify(css) + ';');
+const compat = fs.readFileSync(path.join(root, 'src/noshots-compat.js'), 'utf8').replace(/\r\n/g, '\n');
+const output = compat + '\n' + runtime.replace(marker, 'var css = ' + JSON.stringify(css) + ';');
 fs.writeFileSync(path.join(root, 'apple.js'), output);
 console.log('Built apple.js: ' + Buffer.byteLength(output) + ' bytes; no runtime dependencies');

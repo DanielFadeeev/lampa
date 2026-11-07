@@ -2,7 +2,9 @@
 
 Install/update URL: https://danielfadeeev.github.io/lampa/apple.js
 
-Version 1.2.5. A self-contained presentation plugin with no runtime dependencies, external fonts, storage writes or playback/network setting overrides.
+Version 1.2.6. A self-contained presentation plugin with no runtime dependencies, external fonts, storage writes or playback/network setting overrides.
+
+Includes a narrowly checked compatibility repair for the No Shots plugin's recursive PlayerPanel.render timer wrapper. The native panel getter and normal player lifecycle are preserved; no application restart is needed to stop the queued recursive callbacks.
 
 Sources: `src/theme.css` and `src/runtime.js`. Build: `node scripts/build.cjs`. Commit the generated `apple.js` together with the sources.
 

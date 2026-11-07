@@ -85,6 +85,10 @@ Full details now use the native backdrop as an edge-to-edge cinema screen with l
 
 The static vignette now follows the full native backdrop instead of ending at the shorter detail panel, removing the horizontal seam below the actions. No layout measuring, extra network calls or animated masks were introduced.
 
+## 1.2.6 — Stop the No Shots timer recursion
+
+The installed No Shots wrapper scheduled a cleanup every time PlayerPanel.render was called, while that cleanup called render again. Its periodic callback kept adding recursive timer chains. A signature-checked compatibility repair restores the verified native getter contract and refreshes its panel on explicit reinitialization. Other wrappers are left untouched. No global timer interception, polling or application-data changes are used.
+
 ## 1.2.5 — Progressive artwork and stable ratings
 
 The hero immediately reuses the selected card's decoded poster in one bounded 640x360 canvas while its matching backdrop loads. This makes no additional image request and retains the matching poster if the backdrop fails. Obsolete requests cannot reveal another title's artwork. Native IMDb/KP placeholders retain invisible slots until real ratings arrive; badge dimensions and action positions remain stable. Removed duplicate native background/rating opacity animations.
