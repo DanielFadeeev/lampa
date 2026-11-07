@@ -1,5 +1,5 @@
 /*
- * Apple TV+ presentation for Lampa 1.1.0 — Android TV / low-paint edition.
+ * Apple TV+ presentation for Lampa 1.2.0 — Android TV / low-paint edition.
  * Local presentation only: no Storage writes, accounts, API overrides, telemetry,
  * controller replacement, fabricated media capabilities or external dependencies.
  * DOM references: yumata/lampa-source components/full/start.js,
@@ -9,7 +9,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '1.1.0';
+    var VERSION = '1.2.0';
     var STYLE_ID = 'apple-tv-plus-ui-style';
     var previous = window.__apple_tv_plus_ui;
     if (previous && !previous.destroyed) {
@@ -26,85 +26,19 @@
     var state = {
         version: VERSION, destroyed: false, started: false,
         root: null, fullRoot: null, hero: null, scroll: null, refs: null,
-        currentCard: null, pendingCard: null, imageURL: '', imageSlot: 0,
+        currentCard: null, pendingCard: null, observedCard: null, heroSignature: '',
+        imageURL: '', loadedImageURL: '', imageSlot: 0, requestedImage: null,
+        imageRequestID: 0, failedImageURL: '', imageRetryAfter: 0,
         refreshTimer: 0, focusTimer: 0, imageTimer: 0, bootstrapTimer: 0,
         frame: 0, bootstrapAttempts: 0, mount: null,
-        mountObserver: null, activityObserver: null, homeObserver: null,
+        mountObserver: null, activityObserver: null, homeObserver: null, cardObserver: null,
+        homeObserverRoot: null, homeObserverMode: '',
+        homeBootstrapTimer: 0, jqueryBound: false,
         stats: { refreshes: 0, heroUpdates: 0, imageRequests: 0 }
     };
     window.__apple_tv_plus_ui = state;
 
-    var css = [
-        'body.atvp-ui{background:#090b10!important;color:#f4f5f7!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}',
-        'body.atvp-ui .background{opacity:.35!important}',
-        'body.atvp-ui .head{background:linear-gradient(180deg,#10131bf5,#10131be8)!important;border-bottom:1px solid #ffffff0c}',
-        'body.atvp-ui .head__body{background:transparent!important}',
-        'body.atvp-ui .head__logo-icon{width:2.6em;height:2.6em;position:relative;display:flex;align-items:center;justify-content:center;border-radius:.8em;background:#ffffff0d}',
-        'body.atvp-ui .head__logo-icon>img{opacity:0!important}',
-        'body.atvp-ui .head__logo-icon:after{content:"TV+";position:absolute;font-size:1em;font-weight:700;letter-spacing:-.06em;color:#f4f5f7;pointer-events:none}',
-        'body.atvp-ui .head__title{font-weight:600;letter-spacing:-.025em}',
-        'body.atvp-ui .head__time-now{font-size:1.7em!important;font-weight:400;letter-spacing:-.04em}',
-        'body.atvp-ui .head__time-date,body.atvp-ui .head__time-week{font-size:.85em;color:#b3b8c3}',
-        'body.atvp-ui .head__action{border-radius:50%!important;transition:transform .14s ease,opacity .14s ease!important}',
-        'body.atvp-ui .head__action.focus{background:#f4f5f7!important;color:#10131b!important;transform:scale(1.04);will-change:transform}',
-        'body.atvp-ui .menu,body.atvp-ui .settings__content,body.atvp-ui .selectbox__content,body.atvp-ui .modal__content,body.atvp-ui .context-menu{background:#151922fa!important;border:1px solid #ffffff1f;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
-        'body.atvp-ui .head{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
-        'body.atvp-ui .settings__content,body.atvp-ui .selectbox__content,body.atvp-ui .modal__content{border-radius:20px!important}',
-        'body.atvp-ui .menu__item,body.atvp-ui .settings-param,body.atvp-ui .selectbox-item{border-radius:12px!important}',
-        'body.atvp-ui .menu__item.focus,body.atvp-ui .settings-param.focus,body.atvp-ui .selectbox-item.focus{background:#f4f5f7!important;color:#10131b!important}',
-        'body.atvp-ui .card{transition:transform .15s cubic-bezier(.2,.7,.3,1)!important;transform-origin:center center}',
-        'body.atvp-ui .card__img,body.atvp-ui .card__view,body.atvp-ui .card__filter{border-radius:14px!important}',
-        'body.atvp-ui .card__view{box-shadow:none!important;transition:none!important}',
-        'body.atvp-ui .card.focus,body.atvp-ui .card.hover{transform:scale(1.035)!important;z-index:2;will-change:transform}',
-        'body.atvp-ui .card .card__view:after{content:"";position:absolute;top:-3px!important;left:-3px!important;right:-3px!important;bottom:-3px!important;border:2px solid #fff!important;border-radius:17px!important;box-shadow:none!important;pointer-events:none;z-index:3!important;opacity:0;transition:opacity .12s ease!important}',
-        'body.atvp-ui .card.focus .card__view:after,body.atvp-ui .card.hover .card__view:after{opacity:1}',
-        'body.atvp-ui .card__title{font-size:1.05em!important;font-weight:500;letter-spacing:-.015em;line-height:1.28;-webkit-line-clamp:2!important}',
-        'body.atvp-ui .card__age{font-size:.85em;color:#a8afbc}',
-        'body.atvp-ui .card__vote,body.atvp-ui .card__quality>div,body.atvp-ui .card__type{background:#10131bea!important;color:#f4f5f7!important;border:1px solid #ffffff14;border-radius:6px!important}',
-        'body.atvp-ui .items-line__title,body.atvp-ui .category-full__title{font-weight:600!important;letter-spacing:-.025em}',
-        'body.atvp-ui .full-start__button,body.atvp-ui .simple-button{border-radius:.8em!important;transition:transform .14s ease,opacity .14s ease!important;box-shadow:none!important}',
-        'body.atvp-ui .full-start__button.focus,body.atvp-ui .simple-button.focus{background:#f4f5f7!important;color:#10131b!important;transform:scale(1.025);will-change:transform}',
-        'body.atvp-ui .full-start__poster,body.atvp-ui .full-start__img,body.atvp-ui .full-start-new__poster,body.atvp-ui .full-start-new__img{border-radius:1em!important}',
-        'body.atvp-ui .atvp-full .full-start-new{position:relative;background:linear-gradient(90deg,#090b10c9,#090b1059 75%,#090b1000);border-radius:1em}',
-        'body.atvp-ui .atvp-full .full-start-new__body{align-items:flex-start;gap:2em}',
-        'body.atvp-ui .atvp-full .full-start-new__right{min-width:0}',
-        'body.atvp-ui .atvp-full .full-start-new__poster{border:1px solid #ffffff1a;box-shadow:none!important}',
-        'body.atvp-ui .atvp-full .full-start-new__head{font-size:.9em;color:#bdc3ce;letter-spacing:.025em;margin-bottom:.65em}',
-        'body.atvp-ui .atvp-full .full-start-new__title{font-size:3.15em!important;font-weight:650;line-height:1.08!important;letter-spacing:-.04em;white-space:normal!important;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-height:2.2em}',
-        'body.atvp-ui .atvp-full .full-start-new__tagline{font-size:1.1em!important;line-height:1.4;color:#d0d4dc;margin-top:.65em;max-height:2.8em;overflow:hidden}',
-        'body.atvp-ui .atvp-full .full-start-new__rate-line{display:flex;align-items:center;flex-wrap:wrap;gap:.5em;margin:1em 0 .85em}',
-        'body.atvp-ui .atvp-full .full-start__rate,body.atvp-ui .atvp-full .full-start__pg,body.atvp-ui .atvp-full .full-start__status{margin:0!important;border:1px solid #ffffff29;border-radius:.4em;background:#131820d9;line-height:1.2;padding:.28em .5em}',
-        'body.atvp-ui .atvp-full .full-start__rate>div:first-child{font-weight:650}',
-        'body.atvp-ui .atvp-full .full-start__rate>div+div{font-size:.7em;letter-spacing:.035em;color:#c0c7d3}',
-        'body.atvp-ui .atvp-full .full-start__pg,body.atvp-ui .atvp-full .full-start__status{font-size:.82em;letter-spacing:.02em}',
-        'body.atvp-ui .atvp-full .tag--quality>div,body.atvp-ui .atvp-full .full-start__quality{border:1px solid #ffffff40;border-radius:.35em;padding:.2em .4em;font-weight:600;letter-spacing:.04em}',
-        'body.atvp-ui .atvp-full .full-start-new__details{font-size:.9em;line-height:1.65;color:#c2c8d3;margin:.75em 0}',
-        'body.atvp-ui .atvp-full .full-start-new__split{opacity:.45;padding:0 .45em}',
-        'body.atvp-ui .atvp-full .full-start-new__reactions{font-size:.87em;opacity:.9}',
-        'body.atvp-ui .atvp-full .full-start-new__buttons{display:flex;align-items:center;flex-wrap:wrap;gap:.65em;margin-top:1.2em}',
-        'body.atvp-ui .atvp-full .full-start-new__buttons>.full-start__button{margin:0!important;min-height:2.9em;background:#ffffff12;border:1px solid #ffffff1a}',
-        'body.atvp-ui .atvp-full .full-start-new__buttons>.button--play{font-weight:600}',
-        'body.atvp-ui .atvp-full .full-start__background{filter:none!important;-webkit-filter:none!important;transition:opacity .24s ease!important;opacity:0}',
-        'body.atvp-ui .atvp-full .full-start__background.loaded{opacity:.56}',
-        'body.atvp-ui .atvp-full .full-start__background.dim{opacity:.14}',
-        'body.atvp-ui .atvp-home{--atvp-hero-height:33vh}',
-        'body.atvp-ui .atvp-home>.activity__body{height:100%!important}',
-        'body.atvp-ui .atvp-main-scroll{position:absolute!important;top:var(--atvp-hero-height)!important;left:0;right:0;bottom:0;height:calc(100% - var(--atvp-hero-height))!important}',
-        'body.atvp-ui .atvp-main-scroll>.scroll__content{padding-top:1.6em!important}',
-        'body.atvp-ui .atvp-hero{position:absolute;left:0;top:0;right:0;height:var(--atvp-hero-height);overflow:hidden;isolation:isolate;pointer-events:none;z-index:1;background:linear-gradient(115deg,#171e2b,#0a0d14 80%);border-radius:0 0 20px 20px}',
-        'body.atvp-ui .atvp-hero__art{position:absolute;right:0;top:0;width:74%;height:100%;object-fit:cover;object-position:50% 35%;opacity:0;transition:opacity .2s ease}',
-        'body.atvp-ui .atvp-hero__art.atvp-image-visible{opacity:.68}',
-        'body.atvp-ui .atvp-hero:after{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,#090b10 1%,#090b10e8 25%,#090b102e 76%),linear-gradient(0deg,#090b10,transparent 55%);z-index:1}',
-        'body.atvp-ui .atvp-hero__content{position:absolute;left:2.25em;right:29%;top:50%;transform:translateY(-50%);z-index:2}',
-        'body.atvp-ui .atvp-hero__eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:.65em;font-weight:600;color:#adb6c6;margin-bottom:.7em}',
-        'body.atvp-ui .atvp-hero__title{font-size:2.4em;line-height:1.08;letter-spacing:-.04em;font-weight:650;max-height:2.2em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}',
-        'body.atvp-ui .atvp-hero__meta{font-size:.78em;line-height:1.45;color:#b9c1ce;margin-top:.75em}',
-        'body.atvp-ui .atvp-hero__overview{font-size:.88em;line-height:1.45;color:#d7dce5;margin-top:.65em;max-width:37em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}',
-        '@media(max-height:600px){body.atvp-ui .atvp-hero__overview{-webkit-line-clamp:1}body.atvp-ui .atvp-hero__title{font-size:2.1em}body.atvp-ui .atvp-full .full-start-new__title{font-size:2.75em!important}body.atvp-ui .atvp-full .full-start-new__buttons{margin-top:.85em}}',
-        '@media(prefers-reduced-motion:reduce){body.atvp-ui .card,body.atvp-ui .card__view:after,body.atvp-ui .head__action,body.atvp-ui .full-start__button,body.atvp-ui .simple-button,body.atvp-ui .atvp-hero__art,body.atvp-ui .full-start__background{transition:none!important}body.atvp-ui .card.focus,body.atvp-ui .card.hover,body.atvp-ui .full-start__button.focus{transform:none!important;will-change:auto!important}}',
-        'body.atvp-ui.no--animation .card,body.atvp-ui.no--animation .card__view:after,body.atvp-ui.no--animation .head__action,body.atvp-ui.no--animation .full-start__button,body.atvp-ui.no--animation .simple-button,body.atvp-ui.no--animation .atvp-hero__art,body.atvp-ui.no--animation .full-start__background{transition:none!important}',
-        'body.atvp-ui.no--animation .card.focus,body.atvp-ui.no--animation .card.hover{transform:none!important;will-change:auto!important}'
-    ].join('\n');
+    var css = "/*\n * Apple TV-inspired presentation. Native Lampa structure, data and focus order\n * remain authoritative. Only transform/opacity animate; no blur or remote font.\n */\n\n/* Shared palette: private variables cannot leak into native Lampa components. */\nbody.atvp-ui {\n    --atvp-bg: #07080b;\n    --atvp-surface: #14161c;\n    --atvp-primary: #f5f5f7;\n    --atvp-secondary: #b5b7c1;\n    --atvp-muted: #90939e;\n    --atvp-line: #ffffff1c;\n    background: var(--atvp-bg) !important;\n    color: var(--atvp-primary) !important;\n}\n\nbody.atvp-ui .background { opacity: .18 !important; }\n\n/* A stable dark navigation surface is less expensive than live background blur. */\nbody.atvp-ui .head {\n    background: #0d0f14f5 !important;\n    border-bottom: 1px solid #ffffff0c;\n    backdrop-filter: none !important;\n    -webkit-backdrop-filter: none !important;\n}\nbody.atvp-ui .head__body { background: transparent !important; }\nbody.atvp-ui .head__logo-icon {\n    width: 2.6em;\n    height: 2.6em;\n    position: relative;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    border-radius: .72em;\n    background: #ffffff0b;\n}\nbody.atvp-ui .head__logo-icon > img { opacity: 0 !important; }\nbody.atvp-ui .head__logo-icon:after {\n    content: \"TV+\";\n    position: absolute;\n    font-size: 1.05em;\n    font-weight: 700;\n    letter-spacing: -.06em;\n    color: var(--atvp-primary);\n    pointer-events: none;\n}\nbody.atvp-ui .head__title { font-weight: 600; letter-spacing: -.025em; }\nbody.atvp-ui .head__time-now { font-size: 1.55em !important; font-weight: 400; letter-spacing: -.045em; }\nbody.atvp-ui .head__time-date,\nbody.atvp-ui .head__time-week { font-size: .82em; color: var(--atvp-muted); }\nbody.atvp-ui .head__action {\n    border-radius: 50% !important;\n    transition: transform .14s ease, opacity .14s ease !important;\n}\nbody.atvp-ui .head__action.focus {\n    color: #101115 !important;\n    background: var(--atvp-primary) !important;\n    transform: scale(1.04);\n    will-change: transform;\n}\n\nbody.atvp-ui .menu,\nbody.atvp-ui .settings__content,\nbody.atvp-ui .selectbox__content,\nbody.atvp-ui .modal__content,\nbody.atvp-ui .context-menu {\n    color: var(--atvp-primary);\n    background: #14171efa !important;\n    border: 1px solid var(--atvp-line);\n    box-shadow: none !important;\n    backdrop-filter: none !important;\n    -webkit-backdrop-filter: none !important;\n}\nbody.atvp-ui .settings__content,\nbody.atvp-ui .selectbox__content,\nbody.atvp-ui .modal__content { border-radius: .9em !important; }\nbody.atvp-ui .menu__item,\nbody.atvp-ui .settings-param,\nbody.atvp-ui .selectbox-item { border-radius: .55em !important; }\nbody.atvp-ui .menu__item.focus,\nbody.atvp-ui .settings-param.focus,\nbody.atvp-ui .selectbox-item.focus {\n    color: #111318 !important;\n    background: var(--atvp-primary) !important;\n}\nbody.atvp-ui .settings-param.focus .settings-param__name,\nbody.atvp-ui .settings-param.focus .settings-param__value,\nbody.atvp-ui .settings-param.focus .settings-param__descr { color: inherit !important; }\n\n/* Focus changes do not resize native rails or repaint a shadow on every frame. */\nbody.atvp-ui .card {\n    transform-origin: center center;\n    transition: transform .15s cubic-bezier(.2,.7,.3,1) !important;\n}\nbody.atvp-ui .card__img,\nbody.atvp-ui .card__view,\nbody.atvp-ui .card__filter { border-radius: .6em !important; }\nbody.atvp-ui .card__view { background: #17191f; box-shadow: none !important; transition: none !important; }\nbody.atvp-ui .card.focus,\nbody.atvp-ui .card.hover { transform: scale(1.028) !important; z-index: 2; will-change: transform; }\nbody.atvp-ui .card .card__view:after {\n    content: \"\";\n    position: absolute;\n    top: -3px !important;\n    left: -3px !important;\n    right: -3px !important;\n    bottom: -3px !important;\n    border: 2px solid #fff !important;\n    border-radius: calc(.6em + 3px) !important;\n    box-shadow: none !important;\n    pointer-events: none;\n    z-index: 3 !important;\n    opacity: 0;\n    transition: opacity .12s ease !important;\n}\nbody.atvp-ui .card.focus .card__view:after,\nbody.atvp-ui .card.hover .card__view:after { opacity: 1; }\nbody.atvp-ui .card__title {\n    color: #e8e9ed;\n    font-size: 1.02em !important;\n    font-weight: 500;\n    letter-spacing: -.015em;\n    line-height: 1.3;\n    -webkit-line-clamp: 2 !important;\n}\nbody.atvp-ui .card.focus .card__title,\nbody.atvp-ui .card.hover .card__title { color: #fff; }\nbody.atvp-ui .card__age { font-size: .82em; color: var(--atvp-muted); }\nbody.atvp-ui .card__vote,\nbody.atvp-ui .card__quality > div,\nbody.atvp-ui .card__type {\n    color: var(--atvp-primary) !important;\n    background: #101217e8 !important;\n    border: 1px solid #ffffff18;\n    border-radius: .3em !important;\n}\nbody.atvp-ui .items-line__title,\nbody.atvp-ui .category-full__title { font-weight: 600 !important; letter-spacing: -.025em; }\n\n/* Reuse native action elements so remote control and third-party actions survive. */\nbody.atvp-ui .full-start__button,\nbody.atvp-ui .simple-button {\n    border-radius: .65em !important;\n    transition: transform .14s ease, opacity .14s ease !important;\n    box-shadow: none !important;\n}\nbody.atvp-ui .full-start__button.focus,\nbody.atvp-ui .simple-button.focus {\n    color: #111318 !important;\n    background: var(--atvp-primary) !important;\n    transform: scale(1.025);\n    will-change: transform;\n}\nbody.atvp-ui .full-start__poster,\nbody.atvp-ui .full-start__img,\nbody.atvp-ui .full-start-new__poster,\nbody.atvp-ui .full-start-new__img { border-radius: .7em !important; }\n\n/* Native detail screen: real poster, real source metadata and a quiet vignette. */\nbody.atvp-ui .atvp-full .full-start-new {\n    position: relative;\n    background: linear-gradient(90deg,#07080bd9 0%,#07080ba3 49%,#07080b28 100%);\n    border-radius: .85em;\n}\nbody.atvp-ui .atvp-full .full-start-new__body { align-items: center; gap: 2.5em; }\nbody.atvp-ui .atvp-full .full-start-new__right { min-width: 0; }\nbody.atvp-ui .atvp-full .full-start-new__poster { border: 1px solid #ffffff1c; box-shadow: none !important; }\nbody.atvp-ui .atvp-full .full-start-new__head {\n    color: #c0c4ce;\n    font-size: .88em;\n    font-weight: 500;\n    letter-spacing: .025em;\n    margin-bottom: .7em;\n}\nbody.atvp-ui .atvp-full .full-start-new__title {\n    font-size: 3.05em !important;\n    font-weight: 700;\n    line-height: 1.08 !important;\n    letter-spacing: -.04em;\n    white-space: normal !important;\n    overflow: hidden;\n    display: -webkit-box;\n    -webkit-line-clamp: 2;\n    -webkit-box-orient: vertical;\n    max-height: 2.2em;\n    overflow-wrap: break-word;\n}\nbody.atvp-ui .atvp-full .full-start-new__tagline {\n    color: #d2d4dc;\n    font-size: 1.03em !important;\n    line-height: 1.4;\n    margin-top: .7em;\n    max-height: 2.8em;\n    overflow: hidden;\n}\nbody.atvp-ui .atvp-full .full-start-new__rate-line {\n    display: flex;\n    align-items: center;\n    flex-wrap: wrap;\n    gap: .45em;\n    margin: 1.05em 0 .8em;\n}\nbody.atvp-ui .atvp-full .full-start__rate,\nbody.atvp-ui .atvp-full .full-start__pg,\nbody.atvp-ui .atvp-full .full-start__status {\n    margin: 0 !important;\n    border: 1px solid #ffffff26;\n    border-radius: .3em;\n    background: #12151bd9;\n    line-height: 1.2;\n    padding: .3em .5em;\n}\nbody.atvp-ui .atvp-full .full-start__rate > div:first-child { font-weight: 600; }\nbody.atvp-ui .atvp-full .full-start__rate > div + div {\n    color: #b9becb;\n    font-size: .68em;\n    letter-spacing: .045em;\n}\nbody.atvp-ui .atvp-full .full-start__pg,\nbody.atvp-ui .atvp-full .full-start__status { font-size: .8em; letter-spacing: .025em; }\nbody.atvp-ui .atvp-full .tag--quality > div,\nbody.atvp-ui .atvp-full .full-start__quality {\n    border: 1px solid #ffffff40;\n    border-radius: .3em;\n    padding: .2em .4em;\n    font-weight: 600;\n    letter-spacing: .04em;\n}\nbody.atvp-ui .atvp-full .full-start-new__details {\n    color: #c0c4ce;\n    font-size: .88em;\n    line-height: 1.65;\n    margin: .75em 0;\n}\nbody.atvp-ui .atvp-full .full-start-new__split { opacity: .4; padding: 0 .5em; }\nbody.atvp-ui .atvp-full .full-start-new__reactions { font-size: .82em; opacity: .85; }\nbody.atvp-ui .atvp-full .full-start-new__buttons {\n    display: flex;\n    align-items: center;\n    flex-wrap: wrap;\n    gap: .65em;\n    margin-top: 1.2em;\n}\nbody.atvp-ui .atvp-full .full-start-new__buttons > .full-start__button {\n    flex: 0 0 auto;\n    margin: 0 !important;\n    min-height: 2.85em;\n    max-width: 100%;\n    background: #ffffff12;\n    border: 1px solid #ffffff1c;\n}\nbody.atvp-ui .atvp-full .full-start-new__buttons > .button--play {\n    color: #111318 !important;\n    background: var(--atvp-primary) !important;\n    border-color: transparent;\n    font-weight: 600;\n    padding-left: 1.1em;\n    padding-right: 1.25em;\n}\nbody.atvp-ui .atvp-full .full-start-new__buttons > .button--play.focus {\n    outline: 2px solid #fff;\n    outline-offset: 4px;\n}\nbody.atvp-ui .atvp-full .full-start__background {\n    filter: none !important;\n    -webkit-filter: none !important;\n    opacity: 0;\n    transition: opacity .24s ease !important;\n}\nbody.atvp-ui .atvp-full .full-start__background.loaded { opacity: .68; }\nbody.atvp-ui .atvp-full .full-start__background.dim { opacity: .13; }\n\n/* Main hero occupies a fixed band. Native rows keep their own scroll geometry. */\nbody.atvp-ui .atvp-home { --atvp-hero-height: 39vh; }\nbody.atvp-ui .atvp-home > .activity__body { height: 100% !important; }\nbody.atvp-ui .atvp-main-scroll {\n    position: absolute !important;\n    top: var(--atvp-hero-height) !important;\n    left: 0;\n    right: 0;\n    bottom: 0;\n    height: calc(100% - var(--atvp-hero-height)) !important;\n}\nbody.atvp-ui .atvp-main-scroll > .scroll__content { padding-top: 1.45em !important; }\nbody.atvp-ui .atvp-hero {\n    position: absolute;\n    left: 0;\n    top: 0;\n    right: 0;\n    height: var(--atvp-hero-height);\n    overflow: hidden;\n    isolation: isolate;\n    pointer-events: none;\n    z-index: 1;\n    background: linear-gradient(110deg,#111722,#07080b 74%);\n}\nbody.atvp-ui .atvp-hero__art {\n    position: absolute;\n    right: 0;\n    top: 0;\n    width: 86%;\n    height: 100%;\n    object-fit: cover;\n    object-position: 50% 36%;\n    opacity: 0;\n    transition: opacity .24s ease;\n}\nbody.atvp-ui .atvp-hero__art.atvp-image-visible { opacity: .88; }\nbody.atvp-ui .atvp-hero:after {\n    content: \"\";\n    position: absolute;\n    top: 0;\n    left: 0;\n    right: 0;\n    bottom: 0;\n    background: linear-gradient(90deg,#07080b 1%,#07080be8 25%,#07080b42 69%,#07080b08 100%),linear-gradient(0deg,#07080b 0%,#07080b26 29%,#07080b00 75%);\n    z-index: 1;\n}\nbody.atvp-ui .atvp-hero__content {\n    position: absolute;\n    left: 2.3em;\n    right: 39%;\n    top: 50%;\n    transform: translateY(-50%);\n    z-index: 2;\n}\nbody.atvp-ui .atvp-hero__eyebrow {\n    color: #b3bac7;\n    text-transform: uppercase;\n    font-size: .6em;\n    font-weight: 600;\n    letter-spacing: .18em;\n    margin-bottom: .85em;\n}\nbody.atvp-ui .atvp-hero__title {\n    color: var(--atvp-primary);\n    font-size: 2.65em;\n    font-weight: 700;\n    line-height: 1.08;\n    letter-spacing: -.04em;\n    max-height: 2.2em;\n    overflow: hidden;\n    overflow-wrap: break-word;\n    display: -webkit-box;\n    -webkit-line-clamp: 2;\n    -webkit-box-orient: vertical;\n}\nbody.atvp-ui .atvp-hero__meta { color: #bec4d0; font-size: .75em; line-height: 1.45; margin-top: .8em; }\nbody.atvp-ui .atvp-hero__overview {\n    color: #d5d8e1;\n    font-size: .84em;\n    line-height: 1.45;\n    margin-top: .8em;\n    max-width: 35em;\n    overflow: hidden;\n    display: -webkit-box;\n    -webkit-line-clamp: 2;\n    -webkit-box-orient: vertical;\n}\nbody.atvp-ui .atvp-hero__meta[hidden],\nbody.atvp-ui .atvp-hero__overview[hidden] { display: none !important; }\n\n/* Keep two-line titles and actions inside the safe region on smaller TV output. */\n@media (max-height: 720px) {\n    body.atvp-ui .atvp-hero__title { font-size: 2.3em; }\n    body.atvp-ui .atvp-hero__overview { font-size: .8em; -webkit-line-clamp: 1; }\n    body.atvp-ui .atvp-full .full-start-new__title { font-size: 2.75em !important; }\n    body.atvp-ui .atvp-full .full-start-new__body { gap: 2em; }\n    body.atvp-ui .atvp-full .full-start-new__buttons { margin-top: .9em; }\n}\n@media (max-height: 600px) {\n    body.atvp-ui .atvp-hero__content { left: 2em; right: 36%; }\n    body.atvp-ui .atvp-hero__title { font-size: 2.1em; }\n    body.atvp-ui .atvp-hero__eyebrow { margin-bottom: .65em; }\n    body.atvp-ui .atvp-full .full-start-new__title { font-size: 2.5em !important; }\n}\n\n/* Native animation preference and OS reduced-motion preference are respected. */\n@media (prefers-reduced-motion: reduce) {\n    body.atvp-ui .card,\n    body.atvp-ui .card__view:after,\n    body.atvp-ui .head__action,\n    body.atvp-ui .full-start__button,\n    body.atvp-ui .simple-button,\n    body.atvp-ui .atvp-hero__art,\n    body.atvp-ui .full-start__background { transition: none !important; }\n    body.atvp-ui .card.focus,\n    body.atvp-ui .card.hover,\n    body.atvp-ui .head__action.focus,\n    body.atvp-ui .full-start__button.focus,\n    body.atvp-ui .simple-button.focus { transform: none !important; will-change: auto !important; }\n}\nbody.atvp-ui.no--animation .card,\nbody.atvp-ui.no--animation .card__view:after,\nbody.atvp-ui.no--animation .head__action,\nbody.atvp-ui.no--animation .full-start__button,\nbody.atvp-ui.no--animation .simple-button,\nbody.atvp-ui.no--animation .atvp-hero__art,\nbody.atvp-ui.no--animation .full-start__background { transition: none !important; }\nbody.atvp-ui.no--animation .card.focus,\nbody.atvp-ui.no--animation .card.hover,\nbody.atvp-ui.no--animation .head__action.focus,\nbody.atvp-ui.no--animation .full-start__button.focus,\nbody.atvp-ui.no--animation .simple-button.focus { transform: none !important; will-change: auto !important; }";
 
     function element(value) {
         return value && (value.nodeType === 1 ? value : value[0] && value[0].nodeType === 1 ? value[0] : null);
@@ -131,9 +65,51 @@
         state.focusTimer = state.imageTimer = 0;
         state.pendingCard = null;
     }
+    function cancelRefresh() {
+        window.clearTimeout(state.refreshTimer);
+        window.clearTimeout(state.bootstrapTimer);
+        window.clearTimeout(state.frame);
+        if (window.cancelAnimationFrame) window.cancelAnimationFrame(state.frame);
+        state.refreshTimer = state.bootstrapTimer = state.frame = 0;
+    }
+    function cancelImage() {
+        state.imageRequestID++;
+        if (state.requestedImage) {
+            state.requestedImage.onload = state.requestedImage.onerror = null;
+            state.requestedImage.removeAttribute('src');
+        }
+        state.requestedImage = null;
+    }
+    function disconnectCard() {
+        if (state.cardObserver) state.cardObserver.disconnect();
+        if (state.observedCard) state.observedCard.removeEventListener('load', focusedCardChange, true);
+        state.observedCard = null;
+    }
+    function focusedCardChange() {
+        if (!state.destroyed && !document.hidden && state.observedCard) queueFocus(state.observedCard, true);
+    }
+    function observeCard(card) {
+        if (state.observedCard === card) return;
+        disconnectCard();
+        if (!card) return;
+        state.observedCard = card;
+        // Only the selected card can change the hero. Do not inspect every
+        // lazy poster/rating mutation in the catalogue while scrolling.
+        if (window.MutationObserver) {
+            if (!state.cardObserver) state.cardObserver = new MutationObserver(focusedCardChange);
+            state.cardObserver.observe(card, { childList: true, subtree: true, characterData: true });
+        }
+        card.addEventListener('load', focusedCardChange, true);
+    }
     function detachHome() {
         clearFocus();
+        cancelImage();
+        disconnectCard();
+        window.clearTimeout(state.homeBootstrapTimer);
+        state.homeBootstrapTimer = 0;
         if (state.homeObserver) state.homeObserver.disconnect();
+        state.homeObserverRoot = null;
+        state.homeObserverMode = '';
         if (state.root) state.root.classList.remove('atvp-home');
         if (state.scroll) state.scroll.classList.remove('atvp-main-scroll');
         if (state.refs) state.refs.images.forEach(function (image) {
@@ -142,7 +118,9 @@
         });
         if (state.hero && state.hero.parentNode) state.hero.parentNode.removeChild(state.hero);
         state.root = state.scroll = state.hero = state.refs = state.currentCard = null;
-        state.imageURL = '';
+        state.imageURL = state.loadedImageURL = state.heroSignature = '';
+        state.failedImageURL = '';
+        state.imageRetryAfter = 0;
     }
     function createHero(root, scroll) {
         var hero = make('section', 'atvp-hero');
@@ -183,60 +161,98 @@
         } catch (ignore) { /* Reuse an already-loaded native poster below. */ }
         if (url) return String(url).replace(/\/t\/p\/(?:original|w\d+)\//, '/t/p/w780/');
         var image = card.querySelector('.card__img');
-        url = image && (image.currentSrc || image.src);
+        url = image && (image.currentSrc || (image.getAttribute('src') && image.src));
         return url && !/img_(?:load|broken)\./.test(url) ? url : '';
     }
     function updateImage(card) {
         state.imageTimer = 0;
         if (state.destroyed || !state.hero || card !== state.currentCard || !state.root.contains(card) || document.hidden) return;
         var url = artwork(cardData(card), card);
-        if (url === state.imageURL) return;
-        state.imageURL = url;
+        if (url === state.loadedImageURL) {
+            cancelImage();
+            state.imageURL = url;
+            if (url) state.refs.images[state.imageSlot].classList.add('atvp-image-visible');
+            return;
+        }
+        if (state.requestedImage && url === state.imageURL) return;
         if (!url) {
+            cancelImage();
+            state.imageURL = '';
             state.refs.images.forEach(function (image) { image.classList.remove('atvp-image-visible'); });
             return;
         }
+        // A failed request can be retried on a later focus/load/activity event,
+        // but never starts an autonomous retry or polling loop.
+        if (url === state.failedImageURL && Date.now() < state.imageRetryAfter) return;
+        cancelImage();
+        state.imageURL = url;
         var nextSlot = 1 - state.imageSlot;
         var image = state.refs.images[nextSlot];
+        var requestID = state.imageRequestID;
+        state.requestedImage = image;
         image.classList.remove('atvp-image-visible');
         image.onload = function () {
-            if (state.destroyed || !state.refs || state.imageURL !== url || card !== state.currentCard) return;
+            if (state.destroyed || document.hidden || !state.refs || state.imageRequestID !== requestID || state.imageURL !== url || card !== state.currentCard) return;
             state.refs.images[state.imageSlot].classList.remove('atvp-image-visible');
             image.classList.add('atvp-image-visible');
             state.imageSlot = nextSlot;
+            state.loadedImageURL = url;
+            state.failedImageURL = '';
+            state.imageRetryAfter = 0;
+            state.requestedImage = null;
+            image.onload = image.onerror = null;
         };
-        image.onerror = function () { image.classList.remove('atvp-image-visible'); };
+        image.onerror = function () {
+            if (state.destroyed || state.imageRequestID !== requestID) return;
+            image.classList.remove('atvp-image-visible');
+            image.onload = image.onerror = null;
+            state.requestedImage = null;
+            state.imageURL = '';
+            state.failedImageURL = url;
+            state.imageRetryAfter = Date.now() + 2500;
+        };
         state.stats.imageRequests++;
         image.src = url;
     }
     function updateHero(card) {
         state.focusTimer = 0;
         state.pendingCard = null;
-        if (state.destroyed || !state.hero || !card || !state.root.contains(card)) return;
+        if (state.destroyed || document.hidden || !state.hero || !card || !state.root.contains(card)) return;
         var data = cardData(card);
         var titleNode = card.querySelector('.card__title');
         var title = data.title || data.name || (titleNode && titleNode.textContent) || '';
-        if (!title) return;
         state.currentCard = card;
-        var date = data.release_date || data.first_air_date || '';
+        observeCard(card);
+        var date = String(data.release_date || data.first_air_date || '');
         var meta = [];
         if (/^\d{4}/.test(date)) meta.push(date.slice(0, 4));
         var rating = Number(data.vote_average || 0);
         if (rating > 0 && isFinite(rating)) meta.push('Рейтинг ' + rating.toFixed(1));
         if (data.original_name || data.first_air_date || data.media_type === 'tv') meta.push('Сериал');
         else if (data.release_date || data.media_type === 'movie') meta.push('Фильм');
-        setText(state.refs.title, String(title));
-        setText(state.refs.meta, meta.join('  ·  '));
-        setText(state.refs.overview, String(data.overview || data.description || '').replace(/<[^>]*>/g, '').slice(0, 360));
-        state.stats.heroUpdates++;
+        var metaText = meta.join('  ·  ');
+        var overview = String(data.overview || data.description || '').replace(/<[^>]*>/g, '').slice(0, 360);
+        var signature = [title, metaText, overview].join('\u0000');
+        if (signature !== state.heroSignature) {
+            setText(state.refs.title, String(title));
+            setText(state.refs.meta, metaText);
+            setText(state.refs.overview, overview);
+            state.refs.meta.hidden = !metaText;
+            state.refs.overview.hidden = !overview;
+            state.heroSignature = signature;
+            state.stats.heroUpdates++;
+        }
         window.clearTimeout(state.imageTimer);
         // Metadata reacts promptly; image requests wait for deliberate dwell.
         state.imageTimer = window.setTimeout(function () { updateImage(card); }, 240);
     }
-    function queueFocus(card) {
-        if (state.destroyed || !card || !state.root || !state.root.contains(card)) return;
-        if (card === state.pendingCard || (card === state.currentCard && !state.pendingCard)) return;
+    function queueFocus(card, dirty) {
+        if (state.destroyed || document.hidden || !card || !state.root || !state.root.contains(card)) return;
+        if (card === state.pendingCard) return;
+        if (card === state.currentCard && !state.pendingCard && !dirty && (state.imageURL || Date.now() < state.imageRetryAfter)) return;
         clearFocus();
+        if (card !== state.currentCard) cancelImage();
+        observeCard(card);
         state.pendingCard = card;
         state.focusTimer = window.setTimeout(function () { updateHero(card); }, 65);
     }
@@ -245,24 +261,43 @@
         if (!node || node.nodeType !== 1 || node.hasAttribute('data-atvp-hero')) return false;
         return (node.matches && node.matches('.card,.scroll,.activity__body,.items-line')) || !!node.querySelector('.card,.scroll');
     }
-    function observeHome(root) {
-        if (!window.MutationObserver) return;
+    function observeHome(root, bootstrap) {
+        if (!window.MutationObserver || document.hidden) return;
+        var mode = bootstrap ? 'bootstrap' : 'structural';
+        if (state.homeObserverRoot === root && state.homeObserverMode === mode) return;
+        if (state.homeObserver) state.homeObserver.disconnect();
+        window.clearTimeout(state.homeBootstrapTimer);
+        state.homeBootstrapTimer = 0;
+        state.homeObserverRoot = root;
+        state.homeObserverMode = mode;
         if (!state.homeObserver) state.homeObserver = new MutationObserver(function (records) {
-            if (state.destroyed) return;
+            if (state.destroyed || document.hidden) return;
             for (var i = 0; i < records.length; i++) {
                 var record = records[i];
                 if (closest(record.target, '[data-atvp-hero]')) continue;
-                var card = closest(record.target, '.card');
-                if (card && (!state.currentCard || card === state.currentCard || card === state.pendingCard)) { scheduleRefresh(); return; }
                 for (var j = 0; j < record.addedNodes.length; j++) {
                     if (meaningfulInsert(record.addedNodes[j])) { scheduleRefresh(); return; }
                 }
             }
         });
-        state.homeObserver.observe(root, { childList: true, subtree: true });
+        if (bootstrap) {
+            // Bounded fallback for Lampa versions that append the first cards
+            // without an activity-ready signal. Afterwards observe only the
+            // three structural roots, never the whole catalogue subtree.
+            state.homeObserver.observe(root, { childList: true, subtree: true });
+            state.homeBootstrapTimer = window.setTimeout(function () {
+                state.homeBootstrapTimer = 0;
+                if (!state.destroyed && state.root === root) observeHome(root, false);
+            }, 20000);
+        } else {
+            state.homeObserver.observe(root, { childList: true });
+            var body = root.querySelector('.activity__body');
+            if (body) state.homeObserver.observe(body, { childList: true });
+            if (state.scroll) state.homeObserver.observe(state.scroll, { childList: true });
+        }
     }
     function observeActivities(root) {
-        if (!window.MutationObserver) return;
+        if (!window.MutationObserver || document.hidden) return;
         var mount = document.querySelector('.activitys') || (root && root.parentNode) || document.body;
         if (state.mount !== mount) {
             if (state.mountObserver) state.mountObserver.disconnect();
@@ -273,12 +308,21 @@
         }
         if (state.activityObserver) state.activityObserver.disconnect();
         else state.activityObserver = new MutationObserver(function (records) {
-            if (records.some(function (record) { return record.oldValue !== record.target.className; })) scheduleRefresh();
+            if (records.some(function (record) {
+                // Presentation classes are our own writes, not navigation.
+                var before = String(record.oldValue || '').replace(/\batvp-(?:home|full)\b/g, '').replace(/\s+/g, ' ').trim();
+                var after = String(record.target.className || '').replace(/\batvp-(?:home|full)\b/g, '').replace(/\s+/g, ' ').trim();
+                return before !== after;
+            })) scheduleRefresh();
         });
         var activities = mount.querySelectorAll('.activity');
         for (var i = 0; i < activities.length; i++) state.activityObserver.observe(activities[i], { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
     }
     function hookLampa() {
+        if (window.jQuery && !state.jqueryBound) {
+            window.jQuery(document).on('hover:focus.atvp', '.card', focusEvent);
+            state.jqueryBound = true;
+        }
         if (!window.Lampa || !Lampa.Listener || !Lampa.Listener.follow) return;
         // Lampa versions differ in unsubscribe support. Register one dispatcher
         // per page, then release its callback on destroy (no retained DOM/state).
@@ -294,7 +338,9 @@
     }
     function refresh() {
         state.frame = 0;
-        if (state.destroyed) return;
+        if (state.destroyed || document.hidden) return;
+        window.clearTimeout(state.bootstrapTimer);
+        state.bootstrapTimer = 0;
         state.stats.refreshes++;
         hookLampa();
         var active = activeActivity();
@@ -310,29 +356,49 @@
         }
         if (!active || active.component !== 'main' || !root) {
             if (state.root) detachHome();
-            if (!active && state.bootstrapAttempts++ < 10) state.bootstrapTimer = window.setTimeout(scheduleRefresh, 500);
+            if (!active && state.bootstrapAttempts++ < 30) state.bootstrapTimer = window.setTimeout(function () {
+                state.bootstrapTimer = 0;
+                scheduleRefresh();
+            }, 500);
             return;
         }
         if (state.root !== root) {
             detachHome();
             state.root = root;
-            observeHome(root);
+            observeHome(root, true);
         }
         var scroll = root.querySelector('.activity__body .scroll');
         var firstCard = root.querySelector('.card');
         if (!scroll || !firstCard) return;
+        if (state.hero && state.scroll !== scroll) {
+            detachHome();
+            state.root = root;
+        }
         if (!state.hero) createHero(root, scroll);
-        queueFocus(root.querySelector('.card.focus') || firstCard);
+        observeHome(root, false);
+        queueFocus(root.querySelector('.card.focus') || firstCard, true);
     }
     function scheduleRefresh() {
-        if (state.destroyed || state.refreshTimer || state.frame) return;
+        if (state.destroyed) return;
+        if (document.hidden) return;
+        if (state.refreshTimer || state.frame) return;
         state.refreshTimer = window.setTimeout(function () {
             state.refreshTimer = 0;
             state.frame = window.requestAnimationFrame ? window.requestAnimationFrame(refresh) : window.setTimeout(refresh, 16);
         }, 160);
     }
     function visibilityChange() {
-        if (document.hidden) clearFocus();
+        if (document.hidden) {
+            clearFocus();
+            cancelRefresh();
+            cancelImage();
+            disconnectCard();
+            window.clearTimeout(state.homeBootstrapTimer);
+            state.homeBootstrapTimer = 0;
+            [state.mountObserver, state.activityObserver, state.homeObserver].forEach(function (observer) { if (observer) observer.disconnect(); });
+            state.mount = state.homeObserverRoot = null;
+            state.homeObserverMode = '';
+        }
         else {
             state.currentCard = null;
             scheduleRefresh();
@@ -341,10 +407,7 @@
     function destroy() {
         if (state.destroyed) return;
         state.destroyed = true;
-        window.clearTimeout(state.refreshTimer);
-        window.clearTimeout(state.bootstrapTimer);
-        window.clearTimeout(state.frame);
-        if (window.cancelAnimationFrame) window.cancelAnimationFrame(state.frame);
+        cancelRefresh();
         [state.mountObserver, state.activityObserver, state.homeObserver].forEach(function (observer) { if (observer) observer.disconnect(); });
         detachHome();
         if (state.fullRoot) state.fullRoot.classList.remove('atvp-full');
@@ -353,7 +416,8 @@
         document.removeEventListener('focusin', focusEvent, true);
         document.removeEventListener('visibilitychange', visibilityChange);
         document.removeEventListener('DOMContentLoaded', start);
-        if (window.jQuery) window.jQuery(document).off('hover:focus.atvp', '.card', focusEvent);
+        if (window.jQuery && state.jqueryBound) window.jQuery(document).off('hover:focus.atvp', '.card', focusEvent);
+        state.jqueryBound = false;
         var bridge = window.__apple_tv_plus_activity_bridge;
         if (bridge && bridge.callback === scheduleRefresh) bridge.callback = null;
         var style = document.getElementById(STYLE_ID);
@@ -374,7 +438,6 @@
         document.addEventListener('hover:focus', focusEvent, true);
         document.addEventListener('focusin', focusEvent, true);
         document.addEventListener('visibilitychange', visibilityChange);
-        if (window.jQuery) window.jQuery(document).on('hover:focus.atvp', '.card', focusEvent);
         scheduleRefresh();
         console.info('AppleTVPlusUI ready', VERSION);
     }

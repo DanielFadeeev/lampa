@@ -1,0 +1,5 @@
+node_modules/
+preview/assets/
+preview/artifacts/
+tests/artifacts/
+*.log

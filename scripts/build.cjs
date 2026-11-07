@@ -1,0 +1,11 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const runtime = fs.readFileSync(path.join(root, 'src/runtime.js'), 'utf8').replace(/\r\n/g, '\n');
+const css = fs.readFileSync(path.join(root, 'src/theme.css'), 'utf8').replace(/\r\n/g, '\n').trim();
+const marker = 'var css = /* ATVP_THEME_CSS */ "";';
+if (runtime.split(marker).length !== 2) throw new Error('Expected exactly one theme marker');
+const output = runtime.replace(marker, 'var css = ' + JSON.stringify(css) + ';');
+fs.writeFileSync(path.join(root, 'apple.js'), output);
+console.log('Built apple.js: ' + Buffer.byteLength(output) + ' bytes; no runtime dependencies');
