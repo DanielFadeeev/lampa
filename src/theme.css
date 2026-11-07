@@ -1,6 +1,6 @@
 /*
  * Apple TV-inspired presentation. Native Lampa structure, data and focus order
- * remain authoritative. Only transform/opacity animate; no blur or remote font.
+ * remain authoritative. Focus geometry stays fixed; only opacity fades remain.
  */
 
 /* Shared palette: private variables cannot leak into native Lampa components. */
@@ -68,7 +68,7 @@ body.atvp-ui .head__action {
     padding: .35em !important;
     margin-left: .85em !important;
     border-radius: 50% !important;
-    transition: transform .14s ease, opacity .14s ease !important;
+    transition: opacity .12s ease !important;
 }
 body.atvp-ui .head__action > svg,
 body.atvp-ui .head__action > img { width: 1.3em !important; height: 1.3em !important; }
@@ -79,8 +79,6 @@ body.atvp-ui .head__markers { margin: 0 .4em 0 1em; font-size: .8em; }
 body.atvp-ui .head__action.focus {
     color: #101115 !important;
     background: var(--atvp-primary) !important;
-    transform: scale(1.04);
-    will-change: transform;
 }
 
 body.atvp-ui .menu,
@@ -111,18 +109,42 @@ body.atvp-ui .settings-param.focus .settings-param__name,
 body.atvp-ui .settings-param.focus .settings-param__value,
 body.atvp-ui .settings-param.focus .settings-param__descr { color: inherit !important; }
 
-/* Focus changes do not resize native rails or repaint a shadow on every frame. */
-body.atvp-ui .card {
+/* Native advanced-animation keyframes otherwise bounce the inner poster while
+   the theme scales its parent. Keep both levels stationary so Lampa's rail
+   scroller sees exactly the same geometry before and after a focus change. */
+body.atvp-ui .card,
+body.atvp-ui .card__view,
+body.atvp-ui .head__action,
+body.atvp-ui .menu__item,
+body.atvp-ui .full-start__button,
+body.atvp-ui .simple-button {
+    animation: none !important;
+    -webkit-animation: none !important;
+    transform: none !important;
+    -webkit-transform: none !important;
     will-change: auto !important;
-    transform-origin: center center;
-    transition: transform .15s cubic-bezier(.2,.7,.3,1) !important;
+}
+/* Native advanced-animation also translates the entire activity body on entry.
+   A fixed hero outside that body must not separate from its moving catalogue. */
+body.atvp-ui .atvp-home > .activity__body,
+body.atvp-ui .atvp-full > .activity__body {
+    animation: none !important;
+    -webkit-animation: none !important;
+    transform: none !important;
+    -webkit-transform: none !important;
+    transition: none !important;
+}
+
+/* The focus ring fades without resizing a card or repainting a moving shadow. */
+body.atvp-ui .card {
+    transition: none !important;
 }
 body.atvp-ui .card__img,
 body.atvp-ui .card__view,
 body.atvp-ui .card__filter { border-radius: .6em !important; }
 body.atvp-ui .card__view { background: #17191f; box-shadow: none !important; transition: none !important; }
 body.atvp-ui .card.focus,
-body.atvp-ui .card.hover { transform: scale(1.028) !important; z-index: 2; will-change: transform !important; }
+body.atvp-ui .card.hover { z-index: 2; }
 body.atvp-ui .card .card__view:after {
     content: "";
     position: absolute;
@@ -166,15 +188,13 @@ body.atvp-ui .category-full__title { font-weight: 600 !important; letter-spacing
 body.atvp-ui .full-start__button,
 body.atvp-ui .simple-button {
     border-radius: .65em !important;
-    transition: transform .14s ease, opacity .14s ease !important;
+    transition: opacity .12s ease !important;
     box-shadow: none !important;
 }
 body.atvp-ui .full-start__button.focus,
 body.atvp-ui .simple-button.focus {
     color: #111318 !important;
     background: var(--atvp-primary) !important;
-    transform: scale(1.025);
-    will-change: transform;
 }
 body.atvp-ui .full-start__poster,
 body.atvp-ui .full-start__img,
@@ -273,6 +293,17 @@ body.atvp-ui .atvp-full .full-start-new__buttons > .full-start__button {
     max-width: 100%;
     background: #ffffff12;
     border: 1px solid #ffffff1c;
+}
+/* Native Lampa hides every nonfocused action label with display:none. That
+   shrinks Play and expands the next button, pushing all remaining actions on
+   each key press. Reserve every label at all times; native handlers and focus
+   order survive, and text-only third-party actions remain readable. */
+body.atvp-ui .atvp-full .full-start-new__buttons > .full-start__button > span {
+    display: inline-block !important;
+    max-width: 14em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 body.atvp-ui .atvp-full .full-start-new__buttons > .button--play {
     color: #111318 !important;

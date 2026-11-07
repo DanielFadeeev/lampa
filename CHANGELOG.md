@@ -85,6 +85,10 @@ Full details now use the native backdrop as an edge-to-edge cinema screen with l
 
 The static vignette now follows the full native backdrop instead of ending at the shorter detail panel, removing the horizontal seam below the actions. No layout measuring, extra network calls or animated masks were introduced.
 
+## 1.2.4 — Stable motion and activity lifecycle
+
+Removed overlapping native/theme focus scales and entry keyframes. Detail action labels keep their width when focus moves. Cached home geometry survives detail navigation, and native start/archive events synchronize before paint. Focus updates coalesce per animation frame, obsolete artwork is hidden under a new title, and removed card handlers are released. Added motion and lifecycle regression checks.
+
 ## 1.2.3 — Cinematic home and compact navigation
 
 Recomposed the home screen around a larger, bottom-aligned cinematic hero and a compact poster rail. Reduced the native header, icons and title so navigation occupies less of the television. Kept the native posters, controllers and detail actions.

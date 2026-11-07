@@ -1,5 +1,5 @@
 /*
- * Apple TV+ presentation for Lampa 1.2.3 — Android TV / low-paint edition.
+ * Apple TV+ presentation for Lampa 1.2.4 — Android TV / low-paint edition.
  * Local presentation only: no Storage writes, accounts, API overrides, telemetry,
  * controller replacement, fabricated media capabilities or external dependencies.
  * DOM references: yumata/lampa-source components/full/start.js,
@@ -9,7 +9,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '1.2.3';
+    var VERSION = '1.2.4';
     var STYLE_ID = 'apple-tv-plus-ui-style';
     var previous = window.__apple_tv_plus_ui;
     if (previous && !previous.destroyed) {
@@ -25,7 +25,7 @@
 
     var state = {
         version: VERSION, destroyed: false, started: false,
-        root: null, fullRoot: null, hero: null, scroll: null, refs: null,
+        root: null, fullRoot: null, hero: null, scroll: null, refs: null, homeActive: false,
         currentCard: null, pendingCard: null, observedCard: null, heroSignature: '',
         imageURL: '', loadedImageURL: '', imageSlot: 0, requestedImage: null,
         imageRequestID: 0, failedImageURL: '', imageRetryAfter: 0,
@@ -64,20 +64,37 @@
         } catch (ignore) { return null; }
     }
     function clearFocus() {
-        window.clearTimeout(state.focusTimer);
+        cancelPaint(state.focusTimer);
         window.clearTimeout(state.imageTimer);
         state.focusTimer = state.imageTimer = 0;
         state.pendingCard = null;
     }
-    function clearCardEvents() {
-        state.boundCards.forEach(function (entry) {
-            entry.card.removeEventListener('hover:focus', focusEvent);
-            entry.card.removeEventListener('hover:hover', focusEvent);
-            if (entry.jquery) entry.jquery(entry.card).off('.atvp-card');
+    function paint(callback) {
+        return window.requestAnimationFrame ? window.requestAnimationFrame(callback) : window.setTimeout(callback, 16);
+    }
+    function cancelPaint(id) {
+        if (!id) return;
+        if (window.requestAnimationFrame && window.cancelAnimationFrame) window.cancelAnimationFrame(id);
+        else window.clearTimeout(id);
+    }
+    function unbindCard(entry) {
+        entry.card.removeEventListener('hover:focus', focusEvent);
+        entry.card.removeEventListener('hover:hover', focusEvent);
+        if (entry.jquery) entry.jquery(entry.card).off('.atvp-card');
+        state.boundCardSet.delete(entry.card);
+    }
+    function pruneCardEvents() {
+        state.boundCards = state.boundCards.filter(function (entry) {
+            if (state.root && state.root.contains(entry.card)) return true;
+            unbindCard(entry);
+            return false;
         });
+    }
+    function clearCardEvents() {
+        state.boundCards.forEach(unbindCard);
         state.boundCards = [];
         state.boundCardSet = new WeakSet();
-        window.clearTimeout(state.keyTimer);
+        cancelPaint(state.keyTimer);
         state.keyTimer = 0;
     }
     function bindCardEvents(card) {
@@ -94,8 +111,7 @@
     function cancelRefresh() {
         window.clearTimeout(state.refreshTimer);
         window.clearTimeout(state.bootstrapTimer);
-        window.clearTimeout(state.frame);
-        if (window.cancelAnimationFrame) window.cancelAnimationFrame(state.frame);
+        cancelPaint(state.frame);
         state.refreshTimer = state.bootstrapTimer = state.frame = 0;
     }
     function cancelImage() {
@@ -112,7 +128,7 @@
         state.observedCard = null;
     }
     function focusedCardChange() {
-        if (!state.destroyed && !document.hidden && state.observedCard) queueFocus(state.observedCard, true);
+        if (!state.destroyed && state.homeActive && !document.hidden && state.observedCard) queueFocus(state.observedCard, true);
     }
     function observeCard(card) {
         if (state.observedCard === card) return;
@@ -145,9 +161,23 @@
         });
         if (state.hero && state.hero.parentNode) state.hero.parentNode.removeChild(state.hero);
         state.root = state.scroll = state.hero = state.refs = state.currentCard = null;
+        state.homeActive = false;
         state.imageURL = state.loadedImageURL = state.heroSignature = '';
         state.failedImageURL = '';
         state.imageRetryAfter = 0;
+    }
+    function suspendHome() {
+        if (!state.homeActive) return;
+        // Lampa caches its previous slide. Preserve its decorative geometry so
+        // returning cannot flash the unthemed full-size catalogue for a frame.
+        state.homeActive = false;
+        clearFocus();
+        clearCardEvents();
+        cancelImage();
+        disconnectCard();
+        if (state.homeObserver) state.homeObserver.disconnect();
+        state.homeObserverRoot = null;
+        state.homeObserverMode = '';
     }
     function createHero(root, scroll) {
         var hero = make('section', 'atvp-hero');
@@ -197,7 +227,7 @@
     }
     function updateImage(card) {
         state.imageTimer = 0;
-        if (state.destroyed || !state.hero || card !== state.currentCard || !state.root.contains(card) || document.hidden) return;
+        if (state.destroyed || !state.homeActive || !state.hero || card !== state.currentCard || !state.root.contains(card) || document.hidden) return;
         var url = artwork(cardData(card), card);
         if (url === state.loadedImageURL) {
             cancelImage();
@@ -223,7 +253,7 @@
         state.requestedImage = image;
         image.classList.remove('atvp-image-visible');
         image.onload = function () {
-            if (state.destroyed || document.hidden || !state.refs || state.imageRequestID !== requestID || state.imageURL !== url || card !== state.currentCard) return;
+            if (state.destroyed || !state.homeActive || document.hidden || !state.refs || state.imageRequestID !== requestID || state.imageURL !== url || card !== state.currentCard) return;
             state.refs.images[state.imageSlot].classList.remove('atvp-image-visible');
             image.classList.add('atvp-image-visible');
             state.imageSlot = nextSlot;
@@ -248,12 +278,18 @@
     function updateHero(card) {
         state.focusTimer = 0;
         state.pendingCard = null;
-        if (state.destroyed || document.hidden || !state.hero || !card || !state.root.contains(card)) return;
+        if (state.destroyed || !state.homeActive || document.hidden || !state.hero || !card || !state.root.contains(card)) return;
         var data = cardData(card);
         var titleNode = card.querySelector('.card__title');
         var title = data.title || data.name || (titleNode && titleNode.textContent) || '';
         state.currentCard = card;
         observeCard(card);
+        // Never leave a different film's decoded backdrop under a new title
+        // while the correct artwork waits for the network. Keep the old bytes
+        // cached so returning to that card needs no download.
+        if (artwork(data, card) !== state.loadedImageURL) state.refs.images.forEach(function (image) {
+            image.classList.remove('atvp-image-visible');
+        });
         var date = String(data.release_date || data.first_air_date || '');
         var meta = [];
         if (/^\d{4}/.test(date)) meta.push(date.slice(0, 4));
@@ -278,28 +314,28 @@
         state.imageTimer = window.setTimeout(function () { updateImage(card); }, 240);
     }
     function queueFocus(card, dirty) {
-        if (state.destroyed || document.hidden || !card || !state.root || !state.root.contains(card)) return;
+        if (state.destroyed || !state.homeActive || document.hidden || !card || !state.root || !state.root.contains(card)) return;
         if (card === state.pendingCard) return;
         if (card === state.currentCard && !state.pendingCard && !dirty && (state.imageURL || Date.now() < state.imageRetryAfter)) return;
         clearFocus();
         if (card !== state.currentCard) cancelImage();
         observeCard(card);
         state.pendingCard = card;
-        state.focusTimer = window.setTimeout(function () { updateHero(card); }, 65);
+        state.focusTimer = paint(function () { updateHero(state.pendingCard); });
     }
     function focusEvent(event) { queueFocus(closest(event.target, '.card')); }
     function remoteKey(event) {
         var code = event.keyCode || event.which;
-        if (!state.root || !state.hero || document.hidden || state.keyTimer ||
+        if (!state.homeActive || !state.root || !state.hero || document.hidden || state.keyTimer ||
             !((code >= 19 && code <= 22) || (code >= 37 && code <= 40) || /^Arrow(?:Left|Right|Up|Down)$/.test(event.key || ''))) return;
         // Compatibility fallback for custom controllers that only toggle the
         // focus class. One post-navigation read per key burst, never polling.
-        state.keyTimer = window.setTimeout(function () {
+        state.keyTimer = paint(function () {
             state.keyTimer = 0;
             if (state.destroyed || document.hidden || !state.root) return;
             var card = state.root.querySelector('.card.focus');
             if (card) { bindCardEvents(card); queueFocus(card); }
-        }, 65);
+        });
     }
     function meaningfulInsert(node) {
         if (!node || node.nodeType !== 1 || node.hasAttribute('data-atvp-hero')) return false;
@@ -322,6 +358,9 @@
                 for (var j = 0; j < record.addedNodes.length; j++) {
                     if (meaningfulInsert(record.addedNodes[j])) { scheduleRefresh(); return; }
                 }
+                for (var k = 0; k < record.removedNodes.length; k++) {
+                    if (meaningfulInsert(record.removedNodes[k])) { scheduleRefresh(); return; }
+                }
             }
         });
         if (bootstrap) {
@@ -338,6 +377,8 @@
             var body = root.querySelector('.activity__body');
             if (body) state.homeObserver.observe(body, { childList: true });
             if (state.scroll) state.homeObserver.observe(state.scroll, { childList: true });
+            var content = state.scroll && state.scroll.querySelector('.scroll__content');
+            if (content) state.homeObserver.observe(content, { childList: true });
         }
     }
     function observeActivities(root) {
@@ -373,14 +414,29 @@
         // Lampa versions differ in unsubscribe support. Register one dispatcher
         // per page, then release its callback on destroy (no retained DOM/state).
         var bridge = window.__apple_tv_plus_activity_bridge;
+        if (bridge && bridge.version !== 2 && Lampa.Listener.remove) {
+            Lampa.Listener.remove('activity', bridge.dispatch);
+            Lampa.Listener.remove('app', bridge.dispatch);
+            bridge = null;
+        }
         if (!bridge) {
             bridge = { callback: null };
             window.__apple_tv_plus_activity_bridge = bridge;
-            bridge.dispatch = function () { if (bridge.callback) bridge.callback(); };
+            bridge.version = 2;
+            bridge.dispatch = function (event) { if (bridge.callback) bridge.callback(event); };
             Lampa.Listener.follow('activity', bridge.dispatch);
             Lampa.Listener.follow('app', bridge.dispatch);
         }
-        bridge.callback = scheduleRefresh;
+        bridge.callback = activityEvent;
+    }
+    function activityEvent(event) {
+        if (state.destroyed || document.hidden) return;
+        // These signals run after Lampa has made the destination slide active.
+        // Apply before the browser paints, not after a 160ms debounce.
+        if (event && (event.type === 'start' || event.type === 'archive')) {
+            cancelRefresh();
+            refresh();
+        } else scheduleRefresh();
     }
     function refresh() {
         state.frame = 0;
@@ -392,7 +448,7 @@
         var active = activeActivity();
         var root = active && active.root;
         observeActivities(root);
-        if (state.fullRoot && (!active || active.component !== 'full' || state.fullRoot !== root)) {
+        if (state.fullRoot && active && root && (active.component !== 'full' || state.fullRoot !== root)) {
             state.fullRoot.classList.remove('atvp-full');
             state.fullRoot = null;
         }
@@ -401,7 +457,10 @@
             state.fullRoot = root;
         }
         if (!active || active.component !== 'main' || !root) {
-            if (state.root) detachHome();
+            if (state.root) {
+                if (!state.root.isConnected) detachHome();
+                else suspendHome();
+            }
             if (!active && state.bootstrapAttempts++ < 30) state.bootstrapTimer = window.setTimeout(function () {
                 state.bootstrapTimer = 0;
                 scheduleRefresh();
@@ -420,7 +479,9 @@
             detachHome();
             state.root = root;
         }
+        state.homeActive = true;
         if (!state.hero) createHero(root, scroll);
+        pruneCardEvents();
         Array.prototype.forEach.call(root.querySelectorAll('.card'), bindCardEvents);
         observeHome(root, false);
         queueFocus(root.querySelector('.card.focus') || firstCard, true);
@@ -429,15 +490,12 @@
         if (state.destroyed) return;
         if (document.hidden) return;
         if (state.refreshTimer || state.frame) return;
-        state.refreshTimer = window.setTimeout(function () {
-            state.refreshTimer = 0;
-            state.frame = window.requestAnimationFrame ? window.requestAnimationFrame(refresh) : window.setTimeout(refresh, 16);
-        }, 160);
+        state.frame = paint(refresh);
     }
     function visibilityChange() {
         if (document.hidden) {
             clearFocus();
-            window.clearTimeout(state.keyTimer);
+            cancelPaint(state.keyTimer);
             state.keyTimer = 0;
             cancelRefresh();
             cancelImage();
@@ -471,7 +529,7 @@
         state.jqueryBound = false;
         state.jquery = null;
         var bridge = window.__apple_tv_plus_activity_bridge;
-        if (bridge && bridge.callback === scheduleRefresh) bridge.callback = null;
+        if (bridge && bridge.callback === activityEvent) bridge.callback = null;
         var style = document.getElementById(STYLE_ID);
         if (style && style.parentNode) style.parentNode.removeChild(style);
         if (document.body) document.body.classList.remove('atvp-ui');
