@@ -1,5 +1,5 @@
 /*
- * Apple TV+ presentation for Lampa 1.2.4 — Android TV / low-paint edition.
+ * Apple TV+ presentation for Lampa 1.2.5 — Android TV / low-paint edition.
  * Local presentation only: no Storage writes, accounts, API overrides, telemetry,
  * controller replacement, fabricated media capabilities or external dependencies.
  * DOM references: yumata/lampa-source components/full/start.js,
@@ -9,7 +9,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '1.2.4';
+    var VERSION = '1.2.5';
     var STYLE_ID = 'apple-tv-plus-ui-style';
     var previous = window.__apple_tv_plus_ui;
     if (previous && !previous.destroyed) {
@@ -27,14 +27,14 @@
         version: VERSION, destroyed: false, started: false,
         root: null, fullRoot: null, hero: null, scroll: null, refs: null, homeActive: false,
         currentCard: null, pendingCard: null, observedCard: null, heroSignature: '',
-        imageURL: '', loadedImageURL: '', imageSlot: 0, requestedImage: null,
+        imageURL: '', loadedImageURL: '', imageSlot: 0, requestedImage: null, posterCard: null, posterURL: '',
         imageRequestID: 0, failedImageURL: '', imageRetryAfter: 0,
         refreshTimer: 0, focusTimer: 0, imageTimer: 0, bootstrapTimer: 0, keyTimer: 0,
         frame: 0, bootstrapAttempts: 0, mount: null,
         mountObserver: null, activityObserver: null, homeObserver: null, cardObserver: null,
         homeObserverRoot: null, homeObserverMode: '',
         homeBootstrapTimer: 0, jqueryBound: false, jquery: null, boundCards: [], boundCardSet: new WeakSet(),
-        stats: { refreshes: 0, heroUpdates: 0, imageRequests: 0 }
+        stats: { refreshes: 0, heroUpdates: 0, imageRequests: 0, posterCopies: 0 }
     };
     window.__apple_tv_plus_ui = state;
 
@@ -159,12 +159,15 @@
             image.onload = image.onerror = null;
             image.removeAttribute('src');
         });
+        if (state.refs && state.refs.poster) state.refs.poster.width = state.refs.poster.height = 0;
         if (state.hero && state.hero.parentNode) state.hero.parentNode.removeChild(state.hero);
         state.root = state.scroll = state.hero = state.refs = state.currentCard = null;
         state.homeActive = false;
         state.imageURL = state.loadedImageURL = state.heroSignature = '';
         state.failedImageURL = '';
         state.imageRetryAfter = 0;
+        state.posterCard = null;
+        state.posterURL = '';
     }
     function suspendHome() {
         if (!state.homeActive) return;
@@ -183,6 +186,13 @@
         var hero = make('section', 'atvp-hero');
         hero.setAttribute('aria-hidden', 'true');
         hero.setAttribute('data-atvp-hero', 'true');
+        // One reused, bounded surface copies already decoded native poster
+        // pixels. It issues no URL request, CORS readback or full-size preload.
+        var poster = make('canvas', 'atvp-hero__art atvp-hero__poster');
+        poster.width = 640;
+        poster.height = 360;
+        poster.style.visibility = 'hidden';
+        hero.appendChild(poster);
         var images = [make('img', 'atvp-hero__art'), make('img', 'atvp-hero__art')];
         images.forEach(function (image) {
             image.alt = '';
@@ -202,7 +212,7 @@
         scroll.classList.add('atvp-main-scroll');
         state.scroll = scroll;
         state.hero = hero;
-        state.refs = { images: images, title: title, meta: meta, overview: overview };
+        state.refs = { images: images, poster: poster, title: title, meta: meta, overview: overview };
         // A new DOM must be populated even when the previously selected title
         // has the same metadata signature after returning from a detail page.
         state.heroSignature = '';
@@ -225,6 +235,42 @@
         url = image && (image.currentSrc || (image.getAttribute('src') && image.src));
         return url && !/img_(?:load|broken)\./.test(url) ? url : '';
     }
+    function showNativePoster(card) {
+        var canvas = state.refs.poster;
+        var image = card.querySelector('.card__img');
+        var url = image && (image.currentSrc || (image.getAttribute('src') && image.src));
+        var valid = image && image.complete && image.naturalWidth >= 64 && image.naturalHeight > image.naturalWidth * 1.1 &&
+            url && !/^(?:data:)|img_(?:load|broken)|placeholder|transparent|\.svg(?:[?#]|$)/i.test(url);
+        if (!valid) {
+            canvas.classList.remove('atvp-image-visible');
+            canvas.style.visibility = 'hidden';
+            state.posterCard = null;
+            state.posterURL = '';
+            return;
+        }
+        if (state.posterCard !== card || state.posterURL !== url) {
+            canvas.classList.remove('atvp-image-visible');
+            canvas.style.visibility = 'hidden';
+            try {
+                var context = canvas.getContext('2d');
+                if (!context) return;
+                var cropHeight = image.naturalWidth * canvas.height / canvas.width;
+                var cropTop = Math.max(0, (image.naturalHeight - cropHeight) * .32);
+                context.drawImage(image, 0, cropTop, image.naturalWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+                state.posterCard = card;
+                state.posterURL = url;
+                state.stats.posterCopies++;
+            } catch (ignore) {
+                canvas.classList.remove('atvp-image-visible');
+                canvas.style.visibility = 'hidden';
+                state.posterCard = null;
+                state.posterURL = '';
+                return;
+            }
+        }
+        canvas.style.visibility = 'visible';
+        canvas.classList.add('atvp-image-visible');
+    }
     function updateImage(card) {
         state.imageTimer = 0;
         if (state.destroyed || !state.homeActive || !state.hero || card !== state.currentCard || !state.root.contains(card) || document.hidden) return;
@@ -232,7 +278,11 @@
         if (url === state.loadedImageURL) {
             cancelImage();
             state.imageURL = url;
-            if (url) state.refs.images[state.imageSlot].classList.add('atvp-image-visible');
+            if (url) {
+                state.refs.images[state.imageSlot].style.visibility = 'visible';
+                state.refs.images[state.imageSlot].classList.add('atvp-image-visible');
+                state.refs.poster.classList.remove('atvp-image-visible');
+            }
             return;
         }
         if (state.requestedImage && url === state.imageURL) return;
@@ -255,7 +305,9 @@
         image.onload = function () {
             if (state.destroyed || !state.homeActive || document.hidden || !state.refs || state.imageRequestID !== requestID || state.imageURL !== url || card !== state.currentCard) return;
             state.refs.images[state.imageSlot].classList.remove('atvp-image-visible');
+            image.style.visibility = 'visible';
             image.classList.add('atvp-image-visible');
+            state.refs.poster.classList.remove('atvp-image-visible');
             state.imageSlot = nextSlot;
             state.loadedImageURL = url;
             state.failedImageURL = '';
@@ -284,12 +336,21 @@
         var title = data.title || data.name || (titleNode && titleNode.textContent) || '';
         state.currentCard = card;
         observeCard(card);
-        // Never leave a different film's decoded backdrop under a new title
-        // while the correct artwork waits for the network. Keep the old bytes
-        // cached so returning to that card needs no download.
-        if (artwork(data, card) !== state.loadedImageURL) state.refs.images.forEach(function (image) {
-            image.classList.remove('atvp-image-visible');
-        });
+        // The current film's native poster fills the stage immediately while
+        // its correct backdrop loads; another film's pixels never linger.
+        var desiredArtwork = artwork(data, card);
+        if (!desiredArtwork || desiredArtwork !== state.loadedImageURL) {
+            state.refs.images.forEach(function (image) {
+                image.classList.remove('atvp-image-visible');
+                image.style.visibility = 'hidden';
+            });
+            showNativePoster(card);
+        } else {
+            state.refs.images[state.imageSlot].style.visibility = 'visible';
+            state.refs.images[state.imageSlot].classList.add('atvp-image-visible');
+            state.refs.poster.classList.remove('atvp-image-visible');
+            state.refs.poster.style.visibility = 'hidden';
+        }
         var date = String(data.release_date || data.first_air_date || '');
         var meta = [];
         if (/^\d{4}/.test(date)) meta.push(date.slice(0, 4));

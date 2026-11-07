@@ -245,6 +245,29 @@ body.atvp-ui .atvp-full .full-start-new__rate-line {
     gap: .45em;
     margin: 1.05em 0 .8em;
 }
+/* IMDb/KP are native asynchronous slots: reserve their geometry while hidden
+   instead of moving the other badges and actions when metadata arrives. The
+   slots remain invisible and empty until Lampa supplies a real rating. */
+body.atvp-ui .atvp-full .full-start-new__rate-line > .rate--imdb.hide,
+body.atvp-ui .atvp-full .full-start-new__rate-line > .rate--kp.hide {
+    display: flex !important;
+    visibility: hidden !important;
+}
+body.atvp-ui .atvp-full .full-start-new__rate-line,
+body.atvp-ui .atvp-full .full-start-new__rate-line .full-start__rate,
+body.atvp-ui .atvp-full .full-start-new__rate-line .full-start__rate > * {
+    animation: none !important;
+    -webkit-animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+}
+body.atvp-ui .atvp-full .full-start-new__rate-line .full-start__rate {
+    box-sizing: border-box;
+    flex: 0 0 5.8em;
+    width: 5.8em;
+    height: 2.35em;
+    font-variant-numeric: tabular-nums;
+}
 body.atvp-ui .atvp-full .full-start__rate,
 body.atvp-ui .atvp-full .full-start__pg,
 body.atvp-ui .atvp-full .full-start__status {
@@ -321,6 +344,8 @@ body.atvp-ui .atvp-full .full-start__background {
     filter: none !important;
     -webkit-filter: none !important;
     opacity: 0;
+    animation: none !important;
+    -webkit-animation: none !important;
     transition: opacity .24s ease !important;
 }
 body.atvp-ui .atvp-full .full-start__background.loaded { opacity: .68; }

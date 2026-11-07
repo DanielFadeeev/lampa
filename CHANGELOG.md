@@ -85,6 +85,10 @@ Full details now use the native backdrop as an edge-to-edge cinema screen with l
 
 The static vignette now follows the full native backdrop instead of ending at the shorter detail panel, removing the horizontal seam below the actions. No layout measuring, extra network calls or animated masks were introduced.
 
+## 1.2.5 — Progressive artwork and stable ratings
+
+The hero immediately reuses the selected card's decoded poster in one bounded 640x360 canvas while its matching backdrop loads. This makes no additional image request and retains the matching poster if the backdrop fails. Obsolete requests cannot reveal another title's artwork. Native IMDb/KP placeholders retain invisible slots until real ratings arrive; badge dimensions and action positions remain stable. Removed duplicate native background/rating opacity animations.
+
 ## 1.2.4 — Stable motion and activity lifecycle
 
 Removed overlapping native/theme focus scales and entry keyframes. Detail action labels keep their width when focus moves. Cached home geometry survives detail navigation, and native start/archive events synchronize before paint. Focus updates coalesce per animation frame, obsolete artwork is hidden under a new title, and removed card handlers are released. Added motion and lifecycle regression checks.
