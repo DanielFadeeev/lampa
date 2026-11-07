@@ -1,5 +1,5 @@
 /*
- * Apple TV+ presentation for Lampa 1.2.0 — Android TV / low-paint edition.
+ * Apple TV+ presentation for Lampa 1.2.1 — Android TV / low-paint edition.
  * Local presentation only: no Storage writes, accounts, API overrides, telemetry,
  * controller replacement, fabricated media capabilities or external dependencies.
  * DOM references: yumata/lampa-source components/full/start.js,
@@ -9,7 +9,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '1.2.0';
+    var VERSION = '1.2.1';
     var STYLE_ID = 'apple-tv-plus-ui-style';
     var previous = window.__apple_tv_plus_ui;
     if (previous && !previous.destroyed) {

@@ -2,7 +2,7 @@
 
 Install/update URL: https://danielfadeeev.github.io/lampa/apple.js
 
-Version 1.2.0. A self-contained presentation plugin with no runtime dependencies, external fonts, storage writes or playback/network setting overrides.
+Version 1.2.1. A self-contained presentation plugin with no runtime dependencies, external fonts, storage writes or playback/network setting overrides.
 
 Sources: `src/theme.css` and `src/runtime.js`. Build: `node scripts/build.cjs`. Commit the generated `apple.js` together with the sources.
 

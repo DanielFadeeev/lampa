@@ -15,12 +15,12 @@ body.atvp-ui {
     color: var(--atvp-primary) !important;
 }
 
-body.atvp-ui .background { opacity: .18 !important; }
+body.atvp-ui .background { opacity: .18 !important; filter: none !important; -webkit-filter: none !important; }
 
 /* A stable dark navigation surface is less expensive than live background blur. */
 body.atvp-ui .head {
-    background: #0d0f14f5 !important;
-    border-bottom: 1px solid #ffffff0c;
+    background: linear-gradient(180deg,#07080bf5,#07080bc4) !important;
+    border-bottom: 0;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
@@ -45,10 +45,13 @@ body.atvp-ui .head__logo-icon:after {
     color: var(--atvp-primary);
     pointer-events: none;
 }
-body.atvp-ui .head__title { font-weight: 600; letter-spacing: -.025em; }
+body.atvp-ui .head__title { font-size: 1em; font-weight: 500; letter-spacing: -.025em; opacity: .68; }
 body.atvp-ui .head__time-now { font-size: 1.55em !important; font-weight: 400; letter-spacing: -.045em; }
 body.atvp-ui .head__time-date,
 body.atvp-ui .head__time-week { font-size: .82em; color: var(--atvp-muted); }
+body.atvp-ui .head__time-now,
+body.atvp-ui .head__time-date,
+body.atvp-ui .head__time-week { display: none !important; }
 body.atvp-ui .head__action {
     border-radius: 50% !important;
     transition: transform .14s ease, opacity .14s ease !important;
@@ -90,6 +93,7 @@ body.atvp-ui .settings-param.focus .settings-param__descr { color: inherit !impo
 
 /* Focus changes do not resize native rails or repaint a shadow on every frame. */
 body.atvp-ui .card {
+    will-change: auto !important;
     transform-origin: center center;
     transition: transform .15s cubic-bezier(.2,.7,.3,1) !important;
 }
@@ -98,7 +102,7 @@ body.atvp-ui .card__view,
 body.atvp-ui .card__filter { border-radius: .6em !important; }
 body.atvp-ui .card__view { background: #17191f; box-shadow: none !important; transition: none !important; }
 body.atvp-ui .card.focus,
-body.atvp-ui .card.hover { transform: scale(1.028) !important; z-index: 2; will-change: transform; }
+body.atvp-ui .card.hover { transform: scale(1.028) !important; z-index: 2; will-change: transform !important; }
 body.atvp-ui .card .card__view:after {
     content: "";
     position: absolute;
@@ -272,7 +276,7 @@ body.atvp-ui .atvp-full .full-start__background.loaded { opacity: .68; }
 body.atvp-ui .atvp-full .full-start__background.dim { opacity: .13; }
 
 /* Main hero occupies a fixed band. Native rows keep their own scroll geometry. */
-body.atvp-ui .atvp-home { --atvp-hero-height: 39vh; }
+body.atvp-ui .atvp-home { --atvp-hero-height: 36vh; }
 body.atvp-ui .atvp-home > .activity__body { height: 100% !important; }
 body.atvp-ui .atvp-main-scroll {
     position: absolute !important;
@@ -326,6 +330,7 @@ body.atvp-ui .atvp-hero__content {
     z-index: 2;
 }
 body.atvp-ui .atvp-hero__eyebrow {
+    display: none;
     color: #b3bac7;
     text-transform: uppercase;
     font-size: .6em;
@@ -335,7 +340,7 @@ body.atvp-ui .atvp-hero__eyebrow {
 }
 body.atvp-ui .atvp-hero__title {
     color: var(--atvp-primary);
-    font-size: 2.65em;
+    font-size: 3.15em;
     font-weight: 700;
     line-height: 1.08;
     letter-spacing: -.04em;
@@ -362,7 +367,14 @@ body.atvp-ui .atvp-hero__meta[hidden],
 body.atvp-ui .atvp-hero__overview[hidden] { display: none !important; }
 
 /* Keep two-line titles and actions inside the safe region on smaller TV output. */
+/* Native poster dimensions also need a height budget below the fixed TV header.
+   Pure CSS keeps rows stable without a resize handler or synchronous measuring. */
+body.atvp-ui .atvp-home .items-line .card:not(.card--wide):not(.card--collection):not(.card--folder) {
+    width: min(12.75em, 25.2vh) !important;
+    flex-basis: min(12.75em, 25.2vh) !important;
+}
 @media (max-height: 720px) {
+    body.atvp-ui .atvp-home { --atvp-hero-height: 27vh; }
     body.atvp-ui .atvp-hero__title { font-size: 2.3em; }
     body.atvp-ui .atvp-hero__overview { font-size: .8em; -webkit-line-clamp: 1; }
     body.atvp-ui .atvp-full .full-start-new__title { font-size: 2.75em !important; }
@@ -374,6 +386,74 @@ body.atvp-ui .atvp-hero__overview[hidden] { display: none !important; }
     body.atvp-ui .atvp-hero__title { font-size: 2.1em; }
     body.atvp-ui .atvp-hero__eyebrow { margin-bottom: .65em; }
     body.atvp-ui .atvp-full .full-start-new__title { font-size: 2.5em !important; }
+}
+
+/* Landscape TV detail view is a cinematic stage rather than a poster/text split.
+   Only the decorative detail-poster column is hidden; catalogue posters, data,
+   action elements and their Controller order are unchanged. */
+@media (min-width: 790px) {
+    body.atvp-ui .atvp-full .full-start__background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 92vh;
+        object-fit: cover;
+        object-position: 50% 25%;
+    }
+    body.atvp-ui .atvp-full .full-start__background.loaded { opacity: .94; }
+    body.atvp-ui .atvp-full .full-start__background.dim { opacity: .15; }
+    body.atvp-ui .atvp-full .full-start-new {
+        z-index: 1;
+        border-radius: 0;
+        background: linear-gradient(90deg,#07080bf2 0%,#07080bd1 29%,#07080b54 65%,#07080b00 100%),linear-gradient(0deg,#07080b 0%,#07080b45 41%,#07080b00 92%);
+    }
+    body.atvp-ui .atvp-full .full-start-new__body {
+        box-sizing: border-box;
+        min-height: 60vh;
+        padding: 2.6em 2.5em 2.8em;
+        align-items: center;
+        gap: 0;
+    }
+    body.atvp-ui .atvp-full .full-start-new__left { display: none; }
+    body.atvp-ui .atvp-full .full-start-new__right {
+        box-sizing: border-box;
+        flex: 0 1 62%;
+        width: 62%;
+        max-width: 42em;
+        margin: 0;
+        padding: 0;
+    }
+    body.atvp-ui .atvp-full .full-start-new__title {
+        font-size: 4em !important;
+        line-height: 1.02 !important;
+        letter-spacing: -.045em;
+        max-height: 2.1em;
+    }
+    body.atvp-ui .atvp-full .full-start-new__head { font-size: .8em; margin-bottom: .8em; }
+    body.atvp-ui .atvp-full .full-start-new__tagline { font-size: .98em !important; max-height: 1.4em; margin-top: .8em; }
+    body.atvp-ui .atvp-full .full-start-new__rate-line { font-size: .9em; margin: 1em 0 .75em; }
+    body.atvp-ui .atvp-full .full-start-new__details { font-size: .85em; margin: .75em 0 0; }
+    body.atvp-ui .atvp-full .full-start-new__reactions { display: none; }
+    body.atvp-ui .atvp-full .full-start-new__buttons { margin-top: 1.35em; gap: .65em; }
+    body.atvp-ui .atvp-full .full-start-new__buttons > .full-start__button { border-radius: 999px !important; min-height: 3em; }
+    body.atvp-ui .atvp-full .full-start-new__buttons > .button--play { padding-left: 1.3em; padding-right: 1.5em; }
+}
+@media (min-width: 790px) and (max-height: 720px) {
+    body.atvp-ui .atvp-full .full-start-new__body { min-height: 61vh; padding: 2em 2.3em; }
+    body.atvp-ui .atvp-full .full-start-new__right { flex-basis: 67%; width: 67%; }
+    body.atvp-ui .atvp-full .full-start-new__title { font-size: 3.45em !important; }
+    body.atvp-ui .atvp-full .full-start-new__head { margin-bottom: .6em; }
+    body.atvp-ui .atvp-full .full-start-new__tagline { margin-top: .6em; }
+    body.atvp-ui .atvp-full .full-start-new__rate-line { margin: .8em 0 .6em; }
+    body.atvp-ui .atvp-full .full-start-new__buttons { margin-top: 1em; }
+}
+@media (min-width: 790px) and (max-height: 600px) {
+    body.atvp-ui .atvp-full .full-start-new__body { min-height: 63vh; padding: 1.6em 2em; }
+    body.atvp-ui .atvp-full .full-start-new__right { flex-basis: 72%; width: 72%; }
+    body.atvp-ui .atvp-full .full-start-new__title { font-size: 3em !important; }
+    body.atvp-ui .atvp-full .full-start-new__tagline { display: none; }
 }
 
 /* Native animation preference and OS reduced-motion preference are respected. */

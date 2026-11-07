@@ -76,3 +76,7 @@ Copies are under `reference/`. This subtask did not access ADB, change device se
 Cinematic Apple TV-inspired visual pass with native typography, full-card action hierarchy, restrained focus and compact TV layouts. Source CSS and runtime are separated; the production file remains a single dependency-free script.
 
 Runtime now stops broad initialization observation once cards arrive, handles late metadata without redundant image requests, rejects stale image callbacks, recovers from failed artwork on user navigation, pauses in the background, and releases all owned resources on teardown. Browser checks passed at 1920×1080, 1280×720 and 960×540; idle fixtures made zero additional refreshes/image requests. These are code and fixture checks, not a measured 60fps claim for the television.
+
+## 1.2.1 — TV cinema layout and safe area
+
+Full details now use the native backdrop as an edge-to-edge cinema screen with large left-aligned title and white play pill. Catalogue posters remain native. Main hero and poster sizes account for the TV header and reserve room for titles/year at 1080p,720p and540p. Removed native permanent will-change layers from all catalogue cards; only focused controls opt in. Navigation/controller/data remain unchanged.
