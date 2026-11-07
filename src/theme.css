@@ -401,13 +401,20 @@ body.atvp-ui .atvp-home .items-line .card:not(.card--wide):not(.card--collection
         height: 92vh;
         object-fit: cover;
         object-position: 50% 25%;
+        /* The vignette belongs to the image, not the shorter detail block.
+           Static masks share the backdrop's dimensions and cannot leave a seam
+           when native sections below the action row change height. */
+        -webkit-mask-image: linear-gradient(90deg,transparent 0%,#0003 25%,#000 80%),linear-gradient(180deg,#000 0%,#000 48%,transparent 100%);
+        -webkit-mask-composite: source-in;
+        mask-image: linear-gradient(90deg,transparent 0%,#0003 25%,#000 80%),linear-gradient(180deg,#000 0%,#000 48%,transparent 100%);
+        mask-composite: intersect;
     }
     body.atvp-ui .atvp-full .full-start__background.loaded { opacity: .94; }
     body.atvp-ui .atvp-full .full-start__background.dim { opacity: .15; }
     body.atvp-ui .atvp-full .full-start-new {
         z-index: 1;
         border-radius: 0;
-        background: linear-gradient(90deg,#07080bf2 0%,#07080bd1 29%,#07080b54 65%,#07080b00 100%),linear-gradient(0deg,#07080b 0%,#07080b45 41%,#07080b00 92%);
+        background: transparent;
     }
     body.atvp-ui .atvp-full .full-start-new__body {
         box-sizing: border-box;
